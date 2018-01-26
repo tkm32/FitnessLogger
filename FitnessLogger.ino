@@ -7,13 +7,15 @@
  */
 
 #include <ESP8266WiFi.h>
+#include <WiFiClientSecure.h>
+#include <ArduinoJson.h>
+#include <time.h>
 
-const char* ssid     = "your-ssid";
-const char* password = "your-password";
 
-const char* host = "data.sparkfun.com";
-const char* streamId   = "....................";
-const char* privateKey = "....................";
+const char* ssid     = "HG8045-C16B-bg";
+const char* password = "3f6a9wmm";
+
+const char* host = "takami.php.xdomain.jp";
 
 void setup() {
   Serial.begin(115200);
@@ -41,6 +43,7 @@ void setup() {
   Serial.println("WiFi connected");  
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
+  exit(0);
 }
 
 int value = 0;
