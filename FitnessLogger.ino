@@ -10,22 +10,27 @@
 #include <ESP8266HTTPClient.h>
 #include <ArduinoJson.h>
 #include <time.h>
+extern "C" {
+  #include "user_interface.h"
+}
 
 #define USER_INT 10
 
 #define JST 3600*9
-#define TRUE  1
-#define FALSE 0
 #define TRIP_PER_CYCLE 6.2
-#define MAX_SABORI 150000
+#define SEND_INTERVAL 10000
+#define MAX_SABORI    15000
+#define ADC_THRESH 500
 
 const char* ssid     = "HG8045-C16B-bg";
 const char* password = "3f6a9wmm";
 const char* dst_dir = "http://takami.php.xdomain.jp/fl/";
 
-unsigned long last_send = 0;
+unsigned long last_send = 0, last_rising = 0, now;
 double trip = 0;
-volatile uint8_t user = 0, know_user_info = FALSE;
+uint32_t adc_last = 0, adc;
+
+volatile uint8_t user = 0, know_user_info = 0, req_user_info_cnt = 0;
 String user_name;
 String user_email;
 
@@ -114,9 +119,32 @@ void setup() {
   get_user_info();
 }
 
+int is_rising() {
+  return adc_last < ADC_THRESH && adc > ADC_THRESH;
+}
+
 void loop() {
-  delay(5000);
-  trip += TRIP_PER_CYCLE;
-  send_trip();
+  delay(8);
+  now = millis();
+  if (know_user_info && now - last_send > SEND_INTERVAL) {
+    send_trip();
+    last_send = now;
+  }
+  else if (!know_user_info && req_user_info_cnt == 3) {
+    get_user_info();
+    know_user_info = 1;
+    last_send = now;
+  }
+  adc = system_adc_read();
+  if (is_rising() && millis() - last_rising > 250) {
+    last_rising = millis();
+    if (know_user_info) {
+      trip += TRIP_PER_CYCLE;
+    }
+    else if (!know_user_info && req_user_info_cnt < 3){
+      req_user_info_cnt++;
+    }
+  }
+  adc_last = adc;
 }
 
