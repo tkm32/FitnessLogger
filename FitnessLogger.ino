@@ -7,15 +7,80 @@
  */
 
 #include <ESP8266WiFi.h>
-#include <WiFiClientSecure.h>
+#include <ESP8266HTTPClient.h>
 #include <ArduinoJson.h>
 #include <time.h>
 
+#define USER_INT 10
+
+#define JST 3600*9
+#define TRUE  1
+#define FALSE 0
+#define TRIP_PER_CYCLE 6.2
+#define MAX_SABORI 150000
 
 const char* ssid     = "HG8045-C16B-bg";
 const char* password = "3f6a9wmm";
+const char* dst_dir = "http://takami.php.xdomain.jp/fl/";
 
-const char* host = "takami.php.xdomain.jp";
+unsigned long last_send = 0;
+double trip = 0;
+volatile uint8_t user = 0, know_user_info = FALSE;
+String user_name;
+String user_email;
+
+String get_page(String url) {
+  HTTPClient http;
+
+  http.begin(url);
+  int httpCode = http.GET();
+
+  String result = "";
+
+  if (httpCode < 0) {
+    // result = http.errorToString(httpCode);
+  } else {
+    result = http.getString();
+  }
+
+  http.end();
+  return result;
+}
+
+
+int get_user_info() {
+  String url = String(dst_dir) + String("user_info.php?user=");
+  url += user;
+  Serial.println("Requesting: ");
+  Serial.println(url);
+  String json = get_page(url);
+  // Serial.println(json);
+  StaticJsonBuffer<180> jsonBuffer;
+  JsonObject& object = jsonBuffer.parseObject(json);
+  int res = object.get<int>("result");
+  if (res != 1) {
+    Serial.println(" >>> Failed to get user info.");
+    return -1;
+  }
+  user_name = object.get<String>("name");
+  user_email = object.get<String>("email");
+  Serial.println("Name:  " + user_name);
+  Serial.println("Email: " + user_email);
+  return 0;
+}
+
+int send_trip() {
+  struct tm *tm;
+  time_t t = time(NULL);
+  tm = localtime(&t);
+  String url = String(dst_dir) + "add.php?user=" + user;
+  url += String("&hr=") + tm->tm_hour + "&min=" + tm->tm_min + "&sec=" + tm->tm_sec;
+  url += String("&trip=") + (int)trip;
+  Serial.println("Requesting: ");
+  Serial.println(url);
+  get_page(url);
+  return 0;
+}
 
 void setup() {
   Serial.begin(115200);
@@ -43,57 +108,15 @@ void setup() {
   Serial.println("WiFi connected");  
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
-  exit(0);
-}
+  configTime(JST, 0, "ntp.nict.jp", "ntp.jst.mfeed.ad.jp");
+  delay(2000);
 
-int value = 0;
+  get_user_info();
+}
 
 void loop() {
   delay(5000);
-  ++value;
-
-  Serial.print("connecting to ");
-  Serial.println(host);
-  
-  // Use WiFiClient class to create TCP connections
-  WiFiClient client;
-  const int httpPort = 80;
-  if (!client.connect(host, httpPort)) {
-    Serial.println("connection failed");
-    return;
-  }
-  
-  // We now create a URI for the request
-  String url = "/input/";
-  url += streamId;
-  url += "?private_key=";
-  url += privateKey;
-  url += "&value=";
-  url += value;
-  
-  Serial.print("Requesting URL: ");
-  Serial.println(url);
-  
-  // This will send the request to the server
-  client.print(String("GET ") + url + " HTTP/1.1\r\n" +
-               "Host: " + host + "\r\n" + 
-               "Connection: close\r\n\r\n");
-  unsigned long timeout = millis();
-  while (client.available() == 0) {
-    if (millis() - timeout > 5000) {
-      Serial.println(">>> Client Timeout !");
-      client.stop();
-      return;
-    }
-  }
-  
-  // Read all the lines of the reply from server and print them to Serial
-  while(client.available()){
-    String line = client.readStringUntil('\r');
-    Serial.print(line);
-  }
-  
-  Serial.println();
-  Serial.println("closing connection");
+  trip += TRIP_PER_CYCLE;
+  send_trip();
 }
 
