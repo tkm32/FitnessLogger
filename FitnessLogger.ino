@@ -141,6 +141,7 @@ void loop() {
       Serial.println(user_name);
       Serial.println(user_email);
       Serial.println("----------");
+      trip = 0;
       know_user_info = 1;
       fitness_start = now;
       last_rising = now;
@@ -152,10 +153,11 @@ void loop() {
     finish = 1;
     fitness_start = last_rising - fitness_start;
     Gsender *gsender = Gsender::Instance();    // Getting pointer to class instance
+    String url = String(dst_dir) + "index.php?user=" + user;
     String subject = "FitnessLogger";
-    String body = user_name + "さん<br><br>お疲れ様でした。<br>今回の走行:<br>----------<br>  " + (int)trip + " m<br>  ";
-    body += String("平均速度  ") + (int)(trip * 3600 / fitness_start) + " km/h<br>----------<br><br>";
-    body += String("ユーザページ: ") + dst_dir + "index.php?user=" + user;
+    String body = user_name + "さん<br><br>お疲れ様でした。<br>今回の走行:<br>--------------------<br>  " + (int)trip + " m<br>  ";
+    body += String("平均速度  ") + (int)(trip * 3600 / fitness_start) + " km/h<br>--------------------<br><br>";
+    body += String("ユーザページ: <a href='") + url + "'>" + url + "</a>";
     if(gsender->Subject(subject)->Send(user_email, body)) {
         Serial.println("Message send.");
     } else {
