@@ -10,6 +10,7 @@
 #include <ESP8266HTTPClient.h>
 #include <ArduinoJson.h>
 #include <time.h>
+#include <Gsender.h>
 extern "C" {
   #include "user_interface.h"
 }
@@ -27,8 +28,10 @@ const char* password = "3f6a9wmm";
 const char* dst_dir = "http://takami.php.xdomain.jp/fl/";
 
 unsigned long last_send = 0, last_rising = 0, now;
+unsigned long fitness_start;
 double trip = 0;
 uint32_t adc_last = 0, adc;
+uint8_t finish = 0;
 
 volatile uint8_t user = 0, know_user_info = 0, req_user_info_cnt = 0;
 String user_name;
@@ -115,8 +118,6 @@ void setup() {
   Serial.println(WiFi.localIP());
   configTime(JST, 0, "ntp.nict.jp", "ntp.jst.mfeed.ad.jp");
   delay(2000);
-
-  get_user_info();
 }
 
 int is_rising() {
@@ -124,16 +125,43 @@ int is_rising() {
 }
 
 void loop() {
-  delay(8);
+  if(finish) {
+    return;
+  }
+  delay(6);
   now = millis();
   if (know_user_info && now - last_send > SEND_INTERVAL) {
     send_trip();
     last_send = now;
   }
   else if (!know_user_info && req_user_info_cnt == 3) {
-    get_user_info();
-    know_user_info = 1;
-    last_send = now;
+    if(!get_user_info()) {
+      Serial.println("User Information: ");
+      Serial.println("----------");
+      Serial.println(user_name);
+      Serial.println(user_email);
+      Serial.println("----------");
+      know_user_info = 1;
+      fitness_start = now;
+      last_rising = now;
+      last_send = now;
+    }
+  }
+
+  if (know_user_info && now - last_rising > MAX_SABORI) {
+    finish = 1;
+    fitness_start = last_rising - fitness_start;
+    Gsender *gsender = Gsender::Instance();    // Getting pointer to class instance
+    String subject = "FitnessLogger";
+    String body = user_name + "さん<br><br>お疲れ様でした。<br>今回の走行:<br>----------<br>  " + (int)trip + " m<br>  ";
+    body += String("平均速度  ") + (int)(trip * 3600 / fitness_start) + " km/h<br>----------<br><br>";
+    body += String("ユーザページ: ") + dst_dir + "index.php?user=" + user;
+    if(gsender->Subject(subject)->Send(user_email, body)) {
+        Serial.println("Message send.");
+    } else {
+        Serial.print("Error sending message: ");
+        Serial.println(gsender->getError());
+    }
   }
   adc = system_adc_read();
   if (is_rising() && millis() - last_rising > 250) {
